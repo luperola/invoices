@@ -32,9 +32,12 @@ function extractTwoValues(lines, label) {
 
 function extractCustomerName(lines) {
   for (let i = 0; i < lines.length; i++) {
-    if (lines[i].trim() === "ITALY") {
-      const block = lines.slice(i - 3, i + 1).map(normalize);
-      return block.join(", ");
+    if (normalize(lines[i]) === "ITALY") {
+      const block = [];
+      for (let j = i; j >= 0 && lines[j].trim() !== ""; j--) {
+        block.push(normalize(lines[j]));
+      }
+      return block.reverse().join(", ");
     }
   }
   return "";
