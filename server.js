@@ -64,62 +64,16 @@ function convertToUSFormat(italianStr) {
   });
 }
 
-app.post("/upload", upload.single("pdf"), async (req, res) => {
-  const dataBuffer = fs.readFileSync(req.file.path);
-  const data = await pdf(dataBuffer);
-  const lines = data.text.split(/\r?\n/);
+app.post("/upload", upload.array("pdfs"), async (req, res) => {
+  if (!req.files || req.files.length === 0) {
+    return res
+      .status(400)
+      .json({ error: "Nessun file caricato. Seleziona almeno un PDF." });
+  }
+
+  const db = new database("invoices.db");
 
   try {
-    const customerName = extractCustomerName(lines);
-    const poNo = extractValue(lines, "PO / no");
-    //const poDate = extractValue(lines, "PO / date");
-    const poDate = extractValue(lines, "PO / date")?.replace(/\./g, "/") || "";
-
-    const [orderNo, orderDateRaw] = extractTwoValues(lines, "Order no.");
-    const orderDate = orderDateRaw ? orderDateRaw.replace(/\./g, "/") : "";
-
-    const [deliveryNoteNo, deliveryDateRaw] = extractTwoValues(
-      lines,
-      "Deliv. note no."
-    );
-    const deliveryDate = deliveryDateRaw
-      ? deliveryDateRaw.replace(/\./g, "/")
-      : "";
-
-    /* const [orderNo, orderDate] = extractTwoValues(lines, "Order no.");
-    const [deliveryNoteNo, deliveryDate] = extractTwoValues(
-      lines,
-      "Deliv. note no."
-    ); */
-    const [invoiceNo, invoiceDateRaw] = extractTwoValues(lines, "Invoice no.");
-    const invoiceDate = invoiceDateRaw
-      ? invoiceDateRaw.replace(/\./g, "/")
-      : "";
-
-    const termOfPayment = extractTermOfPayment(lines);
-    const invoiceValue = extractInvoiceValue(lines);
-    const invoiceValueUS = convertToUSFormat(invoiceValue);
-
-    const parsed = {
-      "customer name": customerName,
-      "PO no": poNo,
-      "PO Date": poDate,
-      "Order no": orderNo,
-      "Order Date": orderDate,
-      "Delivery note no": deliveryNoteNo,
-      "Delivery Date": deliveryDate,
-      "Invoice no": invoiceNo,
-      "Invoice Date": invoiceDate,
-      "Invoice Value": invoiceValueUS,
-      "Term of payment": termOfPayment,
-    };
-
-    const obj = parsed;
-    const values = Object.values(obj);
-    console.log(values);
-
-    const db = new database("invoices.db");
-
     db.exec(`
       CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY,
@@ -134,23 +88,74 @@ app.post("/upload", upload.single("pdf"), async (req, res) => {
         Invoice_Date TEXT,
         Invoice_Value REAL,
         Term_of_Payment TEXT
-      )        
+        )
     `);
 
     const insert = db.prepare(
       `INSERT INTO users (Customer,Po_No,Po_Date, Order_No, Order_date, Delivery_Note_No, Delivery_Date, Invoice_No, Invoice_Date, Invoice_Value,Term_of_Payment ) VALUES (?,?, ?, ?,?,?,?,?,?,?,?)`
     );
 
-    insert.run(...values); // spread array elements into the placeholders
+    for (const file of req.files) {
+      const dataBuffer = fs.readFileSync(file.path);
+      const data = await pdf(dataBuffer);
+      const lines = data.text.split(/\r?\n/);
+
+      const customerName = extractCustomerName(lines);
+      const poNo = extractValue(lines, "PO / no");
+      const poDate =
+        extractValue(lines, "PO / date")?.replace(/\./g, "/") || "";
+
+      const [orderNo, orderDateRaw] = extractTwoValues(lines, "Order no.");
+      const orderDate = orderDateRaw ? orderDateRaw.replace(/\./g, "/") : "";
+
+      const [deliveryNoteNo, deliveryDateRaw] = extractTwoValues(
+        lines,
+        "Deliv. note no."
+      );
+      const deliveryDate = deliveryDateRaw
+        ? deliveryDateRaw.replace(/\./g, "/")
+        : "";
+
+      const [invoiceNo, invoiceDateRaw] = extractTwoValues(
+        lines,
+        "Invoice no."
+      );
+      const invoiceDate = invoiceDateRaw
+        ? invoiceDateRaw.replace(/\./g, "/")
+        : "";
+
+      const termOfPayment = extractTermOfPayment(lines);
+      const invoiceValue = extractInvoiceValue(lines);
+      const invoiceValueUS = convertToUSFormat(invoiceValue);
+
+      const parsed = {
+        "customer name": customerName,
+        "PO no": poNo,
+        "PO Date": poDate,
+        "Order no": orderNo,
+        "Order Date": orderDate,
+        "Delivery note no": deliveryNoteNo,
+        "Delivery Date": deliveryDate,
+        "Invoice no": invoiceNo,
+        "Invoice Date": invoiceDate,
+        "Invoice Value": invoiceValueUS,
+        "Term of payment": termOfPayment,
+      };
+
+      const values = Object.values(parsed);
+      console.log(values);
+
+      insert.run(...values);
+
+      fs.unlinkSync(file.path);
+    }
 
     const workbook = new ExcelJS.Workbook();
     const worksheet = workbook.addWorksheet("Data");
 
-    // Replace with your actual table name
     const tableName = "users";
     const rows = db.prepare(`SELECT * FROM ${tableName}`).all();
 
-    // Write header row
     if (rows.length > 0) {
       worksheet.columns = Object.keys(rows[0]).map((key) => ({
         header: key,
@@ -158,24 +163,19 @@ app.post("/upload", upload.single("pdf"), async (req, res) => {
         width: 30,
       }));
 
-      // Write data rows
       rows.forEach((row) => {
         worksheet.addRow(row);
       });
     }
-    workbook.xlsx
-      .writeFile("output.xlsx")
-      .then(() => {
-        console.log("Excel file created: output.xlsx");
-      })
-      .catch((err) => {
-        console.error("Error writing Excel file:", err);
-      });
-    // Close the database connection
-    db.close(); // ✅ Safe to close here
+    await workbook.xlsx.writeFile("output.xlsx");
+    console.log("Excel file created: output.xlsx");
+
+    res.redirect("/download");
   } catch (err) {
     console.error("❌ Errore durante l'estrazione:", err);
     res.status(500).json({ error: "Errore durante l'estrazione dei dati." });
+  } finally {
+    db.close();
   }
 });
 
