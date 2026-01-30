@@ -58,7 +58,7 @@ function parseItalianNumber(italianStr) {
   // Rimuove il punto (migliaia), sostituisce la virgola (decimali)
   const number = parseFloat(italianStr.replace(/\./g, "").replace(",", "."));
   if (Number.isNaN(number)) return null;
-  return number;
+  return Math.round(number * 100) / 100;
 }
 
 app.post("/upload", upload.array("pdfs"), async (req, res) => {
