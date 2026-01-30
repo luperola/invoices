@@ -57,11 +57,9 @@ function convertToUSFormat(italianStr) {
   if (!italianStr) return "";
   // Rimuove il punto (migliaia), sostituisce la virgola (decimali)
   const number = parseFloat(italianStr.replace(/\./g, "").replace(",", "."));
-  // Lo riconverte in stringa con migliaia separate da virgola e due decimali
-  return number.toLocaleString("en-US", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
+  if (Number.isNaN(number)) return "";
+  // Restituisce il numero con due decimali e separatore italiano (virgola), senza migliaia
+  return number.toFixed(2).replace(".", ",");
 }
 
 app.post("/upload", upload.array("pdfs"), async (req, res) => {
@@ -92,7 +90,7 @@ app.post("/upload", upload.array("pdfs"), async (req, res) => {
     `);
 
     const insert = db.prepare(
-      `INSERT INTO users (Customer,Po_No,Po_Date, Order_No, Order_date, Delivery_Note_No, Delivery_Date, Invoice_No, Invoice_Date, Invoice_Value,Term_of_Payment ) VALUES (?,?, ?, ?,?,?,?,?,?,?,?)`
+      `INSERT INTO users (Customer,Po_No,Po_Date, Order_No, Order_date, Delivery_Note_No, Delivery_Date, Invoice_No, Invoice_Date, Invoice_Value,Term_of_Payment ) VALUES (?,?, ?, ?,?,?,?,?,?,?,?)`,
     );
 
     for (const file of req.files) {
@@ -110,7 +108,7 @@ app.post("/upload", upload.array("pdfs"), async (req, res) => {
 
       const [deliveryNoteNo, deliveryDateRaw] = extractTwoValues(
         lines,
-        "Deliv. note no."
+        "Deliv. note no.",
       );
       const deliveryDate = deliveryDateRaw
         ? deliveryDateRaw.replace(/\./g, "/")
@@ -118,7 +116,7 @@ app.post("/upload", upload.array("pdfs"), async (req, res) => {
 
       const [invoiceNo, invoiceDateRaw] = extractTwoValues(
         lines,
-        "Invoice no."
+        "Invoice no.",
       );
       const invoiceDate = invoiceDateRaw
         ? invoiceDateRaw.replace(/\./g, "/")
