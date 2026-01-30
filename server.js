@@ -53,13 +53,12 @@ function extractInvoiceValue(lines) {
   return match ? match[1] : "";
 }
 
-function convertToUSFormat(italianStr) {
-  if (!italianStr) return "";
+function parseItalianNumber(italianStr) {
+  if (!italianStr) return null;
   // Rimuove il punto (migliaia), sostituisce la virgola (decimali)
   const number = parseFloat(italianStr.replace(/\./g, "").replace(",", "."));
-  if (Number.isNaN(number)) return "";
-  // Restituisce il numero con due decimali e separatore italiano (virgola), senza migliaia
-  return number.toFixed(2).replace(".", ",");
+  if (Number.isNaN(number)) return null;
+  return number;
 }
 
 app.post("/upload", upload.array("pdfs"), async (req, res) => {
@@ -124,7 +123,7 @@ app.post("/upload", upload.array("pdfs"), async (req, res) => {
 
       const termOfPayment = extractTermOfPayment(lines);
       const invoiceValue = extractInvoiceValue(lines);
-      const invoiceValueUS = convertToUSFormat(invoiceValue);
+      const invoiceValueNumber = parseItalianNumber(invoiceValue);
 
       const parsed = {
         "customer name": customerName,
@@ -136,7 +135,7 @@ app.post("/upload", upload.array("pdfs"), async (req, res) => {
         "Delivery Date": deliveryDate,
         "Invoice no": invoiceNo,
         "Invoice Date": invoiceDate,
-        "Invoice Value": invoiceValueUS,
+        "Invoice Value": invoiceValueNumber,
         "Term of payment": termOfPayment,
       };
 
@@ -164,6 +163,11 @@ app.post("/upload", upload.array("pdfs"), async (req, res) => {
       rows.forEach((row) => {
         worksheet.addRow(row);
       });
+
+      const invoiceValueColumn = worksheet.getColumn("Invoice_Value");
+      if (invoiceValueColumn) {
+        invoiceValueColumn.numFmt = "€ #.##0,00";
+      }
     }
     await workbook.xlsx.writeFile("output.xlsx");
     console.log("Excel file created: output.xlsx");
