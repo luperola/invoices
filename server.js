@@ -166,7 +166,7 @@ app.post("/upload", upload.array("pdfs"), async (req, res) => {
 
       const invoiceValueColumn = worksheet.getColumn("Invoice_Value");
       if (invoiceValueColumn) {
-        invoiceValueColumn.numFmt = "€ #.##0,00";
+        invoiceValueColumn.numFmt = '#.##0,00 "€"';
       }
     }
     await workbook.xlsx.writeFile("output.xlsx");
