@@ -58,7 +58,7 @@ function parseItalianNumber(italianStr) {
   // Rimuove il punto (migliaia), sostituisce la virgola (decimali)
   const number = parseFloat(italianStr.replace(/\./g, "").replace(",", "."));
   if (Number.isNaN(number)) return null;
-  return Math.round(number * 100) / 100;
+  return Number(number.toFixed(2));
 }
 
 app.post("/upload", upload.array("pdfs"), async (req, res) => {
@@ -167,6 +167,16 @@ app.post("/upload", upload.array("pdfs"), async (req, res) => {
       const invoiceValueColumn = worksheet.getColumn("Invoice_Value");
       if (invoiceValueColumn) {
         invoiceValueColumn.numFmt = '#.##0,00 "€"';
+        invoiceValueColumn.eachCell({ includeEmpty: false }, (cell) => {
+          if (typeof cell.value === "number") {
+            cell.value = Number(cell.value.toFixed(2));
+          } else if (cell.value) {
+            const parsed = parseItalianNumber(String(cell.value));
+            if (parsed !== null) {
+              cell.value = Number(parsed.toFixed(2));
+            }
+          }
+        });
       }
     }
     await workbook.xlsx.writeFile("output.xlsx");
