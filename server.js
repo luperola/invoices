@@ -166,6 +166,8 @@ app.post("/upload", upload.array("pdfs"), async (req, res) => {
 
       const invoiceValueColumn = worksheet.getColumn("Invoice_Value");
       if (invoiceValueColumn) {
+        // Excel format strings use US separators internally.
+        // This still renders as `1.328,75 €` when Excel is opened with Italian locale.
         invoiceValueColumn.numFmt = '#.##0,00 "€"';
         invoiceValueColumn.eachCell({ includeEmpty: false }, (cell) => {
           if (typeof cell.value === "number") {
