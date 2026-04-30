@@ -5,6 +5,7 @@ const pdf = require("pdf-parse");
 const ExcelJS = require("exceljs");
 const path = require("path");
 const database = require("better-sqlite3");
+const open = require("open");
 
 const app = express();
 const upload = multer({ dest: "uploads/" });
@@ -193,8 +194,16 @@ app.post("/upload", upload.array("pdfs"), async (req, res) => {
   }
 });
 
-app.listen(3000, () => {
-  console.log("✅ Server attivo su http://localhost:3000");
+app.listen(3000, async () => {
+  const url = "http://localhost:3000";
+
+  console.log(`✅ Server attivo su ${url}`);
+
+  try {
+    await open.default(url, { app: { name: "chrome" } });
+  } catch (err) {
+    await open.default(url);
+  }
 });
 
 app.get("/download", (req, res) => {
