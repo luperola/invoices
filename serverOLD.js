@@ -62,64 +62,6 @@ function parseItalianNumber(italianStr) {
   return Number(number.toFixed(2));
 }
 
-function parseInvoiceDate(dateStr) {
-  if (!dateStr) return null;
-
-  const parts = String(dateStr).trim().split(/[/.\-]/);
-  if (parts.length !== 3) return null;
-
-  const day = parseInt(parts[0], 10);
-  const month = parseInt(parts[1], 10);
-  let year = parseInt(parts[2], 10);
-
-  if (!day || !month || !year) return null;
-  if (year < 100) year += 2000;
-
-  return new Date(year, month - 1, day, 12, 0, 0);
-}
-
-function formatDateForDb(date) {
-  if (!date) return "";
-
-  const dd = String(date.getDate()).padStart(2, "0");
-  const mm = String(date.getMonth() + 1).padStart(2, "0");
-  const yyyy = date.getFullYear();
-
-  return `${dd}/${mm}/${yyyy}`;
-}
-
-function calculateTermOfPaymentDate(invoiceDateStr, termOfPayment) {
-  const invoiceDate = parseInvoiceDate(invoiceDateStr);
-  if (!invoiceDate || !termOfPayment) return "";
-
-  const term = normalize(termOfPayment).toLowerCase();
-
-  let daysToAdd = 0;
-  if (/\b60\b/.test(term)) {
-    daysToAdd = 60;
-  } else if (/\b30\b/.test(term)) {
-    daysToAdd = 30;
-  } else {
-    return "";
-  }
-
-  const calculatedDate = new Date(invoiceDate.getFullYear(), invoiceDate.getMonth(), invoiceDate.getDate(), 12, 0, 0);
-  calculatedDate.setDate(calculatedDate.getDate() + daysToAdd);
-
-  // Se c'è end oppure month, prevale sempre la regola fine mese, anche se c'è anche net.
-  if (term.includes("end") || term.includes("month")) {
-    const lastDayOfMonth = new Date(calculatedDate.getFullYear(), calculatedDate.getMonth() + 1, 0, 12, 0, 0);
-    return formatDateForDb(lastDayOfMonth);
-  }
-
-  // Se c'è net e non ci sono end/month, usa la data +30/+60 giorni.
-  if (term.includes("net")) {
-    return formatDateForDb(calculatedDate);
-  }
-
-  return "";
-}
-
 app.post("/upload", upload.array("pdfs"), async (req, res) => {
   if (!req.files || req.files.length === 0) {
     return res
@@ -143,18 +85,12 @@ app.post("/upload", upload.array("pdfs"), async (req, res) => {
         Invoice_No TEXT,
         Invoice_Date TEXT,
         Invoice_Value REAL,
-        Term_of_Payment TEXT,
-        Term_of_Payment_Date TEXT
+        Term_of_Payment TEXT
         )
     `);
 
-    const columns = db.prepare(`PRAGMA table_info(users)`).all().map((col) => col.name);
-    if (!columns.includes("Term_of_Payment_Date")) {
-      db.exec(`ALTER TABLE users ADD COLUMN Term_of_Payment_Date TEXT`);
-    }
-
     const insert = db.prepare(
-      `INSERT INTO users (Customer,Po_No,Po_Date, Order_No, Order_date, Delivery_Note_No, Delivery_Date, Invoice_No, Invoice_Date, Invoice_Value, Term_of_Payment, Term_of_Payment_Date ) VALUES (?,?, ?, ?,?,?,?,?,?,?,?,?)`,
+      `INSERT INTO users (Customer,Po_No,Po_Date, Order_No, Order_date, Delivery_Note_No, Delivery_Date, Invoice_No, Invoice_Date, Invoice_Value,Term_of_Payment ) VALUES (?,?, ?, ?,?,?,?,?,?,?,?)`,
     );
 
     for (const file of req.files) {
@@ -187,7 +123,6 @@ app.post("/upload", upload.array("pdfs"), async (req, res) => {
         : "";
 
       const termOfPayment = extractTermOfPayment(lines);
-      const termOfPaymentDate = calculateTermOfPaymentDate(invoiceDate, termOfPayment);
       const invoiceValue = extractInvoiceValue(lines);
       const invoiceValueNumber = parseItalianNumber(invoiceValue);
 
@@ -203,7 +138,6 @@ app.post("/upload", upload.array("pdfs"), async (req, res) => {
         "Invoice Date": invoiceDate,
         "Invoice Value": invoiceValueNumber,
         "Term of payment": termOfPayment,
-        "Term of payment Date": termOfPaymentDate,
       };
 
       const values = Object.values(parsed);
@@ -228,22 +162,8 @@ app.post("/upload", upload.array("pdfs"), async (req, res) => {
       }));
 
       rows.forEach((row) => {
-        worksheet.addRow({
-          ...row,
-          Invoice_Date: parseInvoiceDate(row.Invoice_Date),
-          Term_of_Payment_Date: parseInvoiceDate(row.Term_of_Payment_Date),
-        });
+        worksheet.addRow(row);
       });
-
-      const invoiceDateColumn = worksheet.getColumn("Invoice_Date");
-      if (invoiceDateColumn) {
-        invoiceDateColumn.numFmt = "dd/mm/yy";
-      }
-
-      const termOfPaymentDateColumn = worksheet.getColumn("Term_of_Payment_Date");
-      if (termOfPaymentDateColumn) {
-        termOfPaymentDateColumn.numFmt = "dd/mm/yy";
-      }
 
       const invoiceValueColumn = worksheet.getColumn("Invoice_Value");
       if (invoiceValueColumn) {
